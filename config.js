@@ -25,7 +25,7 @@ export const config = {
   chainSlug: 'goat-testnet',
   tokenSymbol: process.env.GOAT_TOKEN_SYMBOL || 'USDC',
   tokenContract: process.env.GOAT_USDC_TOKEN_CONTRACT || '0x29d1ee93e9ecf6e50f309f498e40a6b42d352fa1',
-  identityRegistry: process.env.GOAT_IDENTITY_REGISTRY || '0x8004A169FB4a3325136EB29fA0ceB6D2e539a432',
+  identityRegistry: process.env.GOAT_IDENTITY_REGISTRY || '0x556089008Fc0a60cD09390Eca93477ca254A5522',
   rpcUrl: process.env.GOAT_RPC_URL || 'https://rpc.testnet3.goat.network',
   explorerUrl: process.env.GOAT_EXPLORER_URL || 'https://explorer.testnet3.goat.network',
 
