@@ -20,6 +20,7 @@ export const config = {
     riskScore: process.env.PRICE_PER_RISK_SCORE || '20000',
     echo: process.env.PRICE_PER_ECHO || '10000'
   },
+  decisionThreshold: Number(process.env.RISK_SEND_THRESHOLD || 50),
 
   chainId: 48816,
   chainSlug: 'goat-testnet',

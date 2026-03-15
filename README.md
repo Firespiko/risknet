@@ -78,12 +78,13 @@ npm run test-payment
 
 ## Key endpoints
 
-- `GET /` — dashboard (HTML) or agent card JSON with `?format=json`
+- `GET /` — polished dashboard (HTML) or agent card JSON with `?format=json`
 - `GET /health` — health/config status
 - `GET /activity` — recent orders / payments / reports feed
 - `GET /identity` — ERC-8004 identity state
 - `GET /payment/status/:orderId` — x402 order status
-- `POST /score` — paid wallet scoring endpoint
+- `POST /analyze` — free comprehensive risk/decision report for a wallet
+- `POST /score` — paid x402-gated wallet scoring endpoint
 
 ## Notes
 
