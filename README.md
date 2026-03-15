@@ -72,11 +72,13 @@ Response shape:
 
 ```env
 GOATX402_MERCHANT_ID=supreme_shop
-GOATX402_API_KEY=...
-GOATX402_API_SECRET=...
-ETHERSCAN_API_KEY=...
+GOATX402_API_KEY=your_goatx402_api_key
+GOATX402_API_SECRET=your_goatx402_api_secret
+ETHERSCAN_API_KEY=your_etherscan_api_key
 PORT=3000
 ```
+
+Create a local `.env` file from `.env.example` and fill in the real values. The repository ignores `.env`, so secrets stay local.
 
 ## Notes on chains
 
