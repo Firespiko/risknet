@@ -1,4 +1,5 @@
 import { GoatX402Client } from 'goatx402-sdk-server'
+import { ethers } from 'ethers'
 import { config } from './config.js'
 import { recordOrder, recordPayment } from './activity-store.js'
 
@@ -9,6 +10,46 @@ export const client = new GoatX402Client({
 })
 
 const paidOrders = new Map()
+const createdOrders = new Map()
+const provider = new ethers.JsonRpcProvider(config.rpcUrl)
+const ERC20_TRANSFER_ABI = ['event Transfer(address indexed from, address indexed to, uint256 value)']
+
+async function findOnchainPayment(orderId) {
+  const meta = createdOrders.get(orderId)
+  if (!meta?.tokenContract || !meta?.fromAddress || !meta?.payToAddress) return null
+
+  try {
+    const contract = new ethers.Contract(meta.tokenContract, ERC20_TRANSFER_ABI, provider)
+    const latestBlock = await provider.getBlockNumber()
+    const fromBlock = Math.max(0, meta.createdBlock - 5)
+    const logs = await contract.queryFilter(
+      contract.filters.Transfer(meta.fromAddress, meta.payToAddress),
+      fromBlock,
+      latestBlock
+    )
+
+    const match = logs.find((log) => {
+      const value = log.args?.value
+      return value != null && BigInt(value.toString()) === BigInt(meta.amountWei)
+    })
+
+    if (!match) return null
+
+    const receipt = await match.getTransactionReceipt()
+    return {
+      orderId,
+      paidAt: new Date().toISOString(),
+      fromAddress: meta.fromAddress,
+      amountWei: meta.amountWei,
+      txHash: receipt.hash,
+      status: 'ONCHAIN_CONFIRMED_FALLBACK',
+      blockNumber: receipt.blockNumber
+    }
+  } catch (err) {
+    console.error('[x402] On-chain fallback check failed:', err.message)
+    return null
+  }
+}
 
 export function requirePayment(amountWei) {
   return async (req, res, next) => {
@@ -30,6 +71,18 @@ export function requirePayment(amountWei) {
           tokenContract: config.tokenContract,
           fromAddress,
           amountWei
+        })
+
+        const createdBlock = await provider.getBlockNumber()
+        createdOrders.set(order.orderId, {
+          createdAt: Date.now(),
+          createdBlock,
+          fromAddress,
+          payToAddress: order.payToAddress,
+          amountWei,
+          tokenSymbol: config.tokenSymbol,
+          tokenContract: config.tokenContract,
+          chainId: config.chainId
         })
 
         recordOrder({
@@ -81,6 +134,15 @@ export function requirePayment(amountWei) {
         req.payment = paymentInfo
         recordPayment(paymentInfo)
         console.log(`[x402] ✅ Payment verified: ${orderId}`)
+        return next()
+      }
+
+      const fallbackPayment = status.status === 'CHECKOUT_VERIFIED' ? await findOnchainPayment(orderId) : null
+      if (fallbackPayment) {
+        paidOrders.set(orderId, fallbackPayment)
+        req.payment = fallbackPayment
+        recordPayment(fallbackPayment)
+        console.log(`[x402] ✅ On-chain fallback matched payment: ${orderId} (${fallbackPayment.txHash})`)
         return next()
       }
 
