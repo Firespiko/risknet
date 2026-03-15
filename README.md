@@ -1,125 +1,92 @@
 # RiskNet 🐐
 
-RiskNet is a Goat-native wallet risk firewall for AI agents.
-
-It scores EVM wallet addresses before funds are sent, returning a structured risk result that agents or humans can use to allow, review, or block a payment.
+RiskNet is now a **GOAT-native paid agent**:
+- **ERC-8004** on-chain agent identity
+- **x402** pay-per-request payment flow
+- **GOAT Testnet3** network config
+- paid `POST /score` wallet-risk endpoint for agents
 
 ## What it does
 
-- Scores a wallet from **0-100**
-- Returns a **risk level**: LOW / MEDIUM / HIGH / CRITICAL
-- Returns an **action**: ALLOW / REVIEW / BLOCK
-- Returns human-readable **reasons** for the score
-- Supports **Ethereum** and a Goat-mode EVM flow
-- Includes a simple **frontend** and a machine-friendly **API**
-- Exposes provider/debug status for **Etherscan** and **GoPlus**
-- Returns a **confidence** rating so fallback mode is visible
-- Optionally gates requests behind **GoatX402** pay-per-request payment flow
+A client or agent can:
+1. Call `POST /score` without payment
+2. Receive an x402 `402 Payment Required` response with order details
+3. Pay on GOAT Testnet3
+4. Retry with `X-Order-ID`
+5. Receive wallet risk score + action + reasons
 
-## Why this exists
+## Files
 
-Autonomous agents should not blindly send funds to arbitrary wallets.
-RiskNet adds a preflight check layer:
+- `server.js` — main GOAT RiskNet agent API
+- `config.js` — env/config loader
+- `x402.js` — x402 middleware + order verification
+- `agent-identity.js` — ERC-8004 identity loading/registration
+- `register-agent.js` — one-time on-chain registration script
+- `risk-engine.js` — wallet scoring logic (Etherscan + GoPlus)
+- `test-payment.js` — demo client for the x402 flow
 
-1. Inspect wallet activity
-2. Inspect security flags
-3. Compute a fraud-risk heuristic
-4. Return a recommendation before payment
+## Environment
 
-## API
-
-### `GET /`
-Simple frontend for humans.
-
-### `GET /health`
-Health and config status.
-
-### `POST /score`
-Request body:
-
-```json
-{
-  "wallet": "0x...",
-  "chain": "ethereum"
-}
-```
-
-Response shape:
-
-```json
-{
-  "wallet": "0x...",
-  "chain": "ethereum",
-  "score": 45,
-  "risk": "MEDIUM",
-  "action": "REVIEW",
-  "confidence": "HIGH",
-  "message": "Some risk detected. Proceed with caution.",
-  "reasons": [
-    "Wallet is 230 days old, which lowers risk.",
-    "Wallet has only 45 transactions, so history is still limited."
-  ],
-  "signals": {
-    "age_days": 230,
-    "tx_count": 45,
-    "sanctioned": false,
-    "scam_flags": false,
-    "chain_supported": true,
-    "used_safe_defaults": false
-  },
-  "providers": {
-    "etherscan": {
-      "status": "success",
-      "error": null
-    },
-    "goplus": {
-      "status": "success",
-      "active_flags": [],
-      "response_shape": {
-        "topLevelKeys": ["result"],
-        "payloadKeys": ["is_sanctioned"]
-      },
-      "error": null
-    }
-  },
-  "checked_at": "2026-03-15T00:00:00.000Z"
-}
-```
-
-## Environment variables
+Create `.env`:
 
 ```env
+GOATX402_API_URL=https://x402-api-lx58aabp0r.testnet3.goat.network
 GOATX402_MERCHANT_ID=supreme_shop
 GOATX402_API_KEY=your_goatx402_api_key
 GOATX402_API_SECRET=your_goatx402_api_secret
+
+GOAT_RPC_URL=https://rpc.testnet3.goat.network
+GOAT_USDC_TOKEN_CONTRACT=0x29d1ee93e9ecf6e50f309f498e40a6b42d352fa1
+GOAT_IDENTITY_REGISTRY=0x8004A169FB4a3325136EB29fA0ceB6D2e539a432
+
+AGENT_PRIVATE_KEY=your_testnet_private_key
+AGENT_WALLET_ADDRESS=your_wallet_address
+AGENT_ID=
+
 ETHERSCAN_API_KEY=your_etherscan_api_key
 PORT=3000
+PRICE_PER_RISK_SCORE=20000
 ```
 
-Create a local `.env` file from `.env.example` and fill in the real values. The repository ignores `.env`, so secrets stay local.
-
-## Notes on chains
-
-- `ethereum` uses Etherscan + GoPlus chain id 1.
-- `goat` currently uses Goat-oriented labeling plus EVM address validation.
-- Since Goat wallets are still EVM-style `0x...` addresses, the format is the same style as Ethereum.
-- If you later get a Goat explorer/API, plug it into the chain config and the rest of the app structure is already prepared.
-
-## Run locally
+## Install
 
 ```bash
 npm install
-node server.js
 ```
 
-Then open:
+## Run agent
 
-<http://localhost:3000>
+```bash
+npm start
+```
 
-## Product direction
+## Register ERC-8004 identity
 
-RiskNet is designed to be both:
-- a **human-facing dashboard**, and
-- an **agent-facing API**
+Fund the wallet first using the GOAT faucet, then:
 
-That makes it useful for demos, hackathons, AI agents, wallets, and automation systems.
+```bash
+npm run register-agent
+```
+
+After registration, add the printed `AGENT_ID` into `.env`.
+
+## Test x402 flow
+
+```bash
+npm run test-payment
+```
+
+## Key endpoints
+
+- `GET /` — agent card
+- `GET /health` — health/config status
+- `GET /identity` — ERC-8004 identity state
+- `GET /payment/status/:orderId` — x402 order status
+- `POST /score` — paid wallet scoring endpoint
+
+## Notes
+
+- GOAT testnet wallets still look like normal EVM `0x...` addresses.
+- GoPlus is used as a public security-signal source in this app.
+- Etherscan is used for wallet age / transaction history heuristics.
+- The current scoring engine is still heuristic/MVP, but now the full GOAT agent/payment story is in place.
