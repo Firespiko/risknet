@@ -7,7 +7,7 @@ dotenv.config();
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
-const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || '';
+const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || 'AIHF8BIWRT324V8QM39SG6RH1Y586FGTH4';
 const X402_BASE_URL = process.env.GOATX402_BASE_URL || 'https://api.goatx402.io';
 const X402_MERCHANT_ID = process.env.GOATX402_MERCHANT_ID || '';
 const USDC_ATOMIC_AMOUNT = '20000';
@@ -35,10 +35,10 @@ const CHAIN_CONFIG = {
 const x402Client =
   process.env.GOATX402_API_KEY && process.env.GOATX402_API_SECRET
     ? new GoatX402Client({
-        baseUrl: X402_BASE_URL,
-        apiKey: process.env.GOATX402_API_KEY,
-        apiSecret: process.env.GOATX402_API_SECRET
-      })
+      baseUrl: X402_BASE_URL,
+      apiKey: process.env.GOATX402_API_KEY,
+      apiSecret: process.env.GOATX402_API_SECRET
+    })
     : null;
 
 app.use(express.json());
@@ -150,12 +150,12 @@ async function fetchEtherscanSignals(wallet, chain) {
 
   if (!config.etherscanEnabled) {
     console.log('[RiskNet] No explorer integration configured for this chain yet. Using safe defaults.');
-    return { ageDays: 0, txCount: 0, usedSafeDefaults: true };
+    return { ageDays: 0, txCount: 0, usedSafeDefaults: true, status: 'unsupported' };
   }
 
   if (!ETHERSCAN_API_KEY || ETHERSCAN_API_KEY.includes('<paste your key here>')) {
     console.log('[RiskNet] ETHERSCAN_API_KEY missing or placeholder. Using safe defaults.');
-    return { ageDays: 0, txCount: 0, usedSafeDefaults: true };
+    return { ageDays: 0, txCount: 0, usedSafeDefaults: true, status: 'fallback' };
   }
 
   try {
@@ -176,7 +176,7 @@ async function fetchEtherscanSignals(wallet, chain) {
 
     if (!result.length) {
       console.log('[RiskNet] Explorer returned empty tx list. Using age=0 txCount=0');
-      return { ageDays: 0, txCount: 0, usedSafeDefaults: true };
+      return { ageDays: 0, txCount: 0, usedSafeDefaults: true, status: 'empty' };
     }
 
     const firstTimestamp = Number(result[0]?.timeStamp || 0);
@@ -186,11 +186,47 @@ async function fetchEtherscanSignals(wallet, chain) {
     const txCount = result.length;
 
     console.log('[RiskNet] Explorer success:', { ageDays, txCount });
-    return { ageDays, txCount, usedSafeDefaults: false };
+    return { ageDays, txCount, usedSafeDefaults: false, status: 'success' };
   } catch (error) {
     console.log('[RiskNet] Explorer lookup failed. Using safe defaults.', error.message);
-    return { ageDays: 0, txCount: 0, usedSafeDefaults: true };
+    return { ageDays: 0, txCount: 0, usedSafeDefaults: true, status: 'fallback', error: error.message };
   }
+}
+
+function extractGoPlusAddressPayload(responseData, wallet) {
+  const loweredWallet = String(wallet || '').toLowerCase();
+  const result = responseData?.result;
+  const data = responseData?.data;
+
+  if (result && typeof result === 'object' && !Array.isArray(result)) {
+    if (result[wallet]) return result[wallet];
+    if (result[loweredWallet]) return result[loweredWallet];
+
+    const resultKeys = Object.keys(result);
+    if (resultKeys.length === 1 && typeof result[resultKeys[0]] === 'object') {
+      return result[resultKeys[0]];
+    }
+
+    if ('is_sanctioned' in result || 'blackmail_activities' in result) {
+      return result;
+    }
+  }
+
+  if (data && typeof data === 'object' && !Array.isArray(data)) {
+    if (data[wallet]) return data[wallet];
+    if (data[loweredWallet]) return data[loweredWallet];
+
+    const dataKeys = Object.keys(data);
+    if (dataKeys.length === 1 && typeof data[dataKeys[0]] === 'object') {
+      return data[dataKeys[0]];
+    }
+
+    if ('is_sanctioned' in data || 'blackmail_activities' in data) {
+      return data;
+    }
+  }
+
+  return {};
 }
 
 async function fetchGoPlusSignals(wallet, chain) {
@@ -204,23 +240,57 @@ async function fetchGoPlusSignals(wallet, chain) {
       timeout: 15000
     });
 
-    const data = response.data?.result || response.data?.data || {};
+    const payload = extractGoPlusAddressPayload(response.data, wallet);
     const flags = {
-      is_sanctioned: data.is_sanctioned ?? SAFE_DEFAULT_FLAGS.is_sanctioned,
-      blackmail_activities: data.blackmail_activities ?? SAFE_DEFAULT_FLAGS.blackmail_activities,
-      stealing_attack: data.stealing_attack ?? SAFE_DEFAULT_FLAGS.stealing_attack,
-      honeypot_related_address: data.honeypot_related_address ?? SAFE_DEFAULT_FLAGS.honeypot_related_address
+      is_sanctioned: payload.is_sanctioned ?? SAFE_DEFAULT_FLAGS.is_sanctioned,
+      blackmail_activities: payload.blackmail_activities ?? SAFE_DEFAULT_FLAGS.blackmail_activities,
+      stealing_attack: payload.stealing_attack ?? SAFE_DEFAULT_FLAGS.stealing_attack,
+      honeypot_related_address: payload.honeypot_related_address ?? SAFE_DEFAULT_FLAGS.honeypot_related_address
     };
 
-    console.log('[RiskNet] GoPlus success:', flags);
-    return { flags, usedSafeDefaults: false };
+    const activeFlags = Object.entries(flags)
+      .filter(([, value]) => String(value) === '1')
+      .map(([key]) => key);
+
+    console.log('[RiskNet] GoPlus success:', {
+      activeFlags,
+      payloadKeys: Object.keys(payload || {}),
+      responseKeys: Object.keys(response.data || {})
+    });
+
+    return {
+      flags,
+      usedSafeDefaults: false,
+      status: 'success',
+      activeFlags,
+      responseShape: {
+        topLevelKeys: Object.keys(response.data || {}),
+        payloadKeys: Object.keys(payload || {})
+      }
+    };
   } catch (error) {
     console.log('[RiskNet] GoPlus failed. Using safe defaults.', error.message);
-    return { flags: { ...SAFE_DEFAULT_FLAGS }, usedSafeDefaults: true };
+    return {
+      flags: { ...SAFE_DEFAULT_FLAGS },
+      usedSafeDefaults: true,
+      status: 'fallback',
+      activeFlags: [],
+      responseShape: {
+        topLevelKeys: [],
+        payloadKeys: []
+      },
+      error: error.message
+    };
   }
 }
 
-function computeRisk({ ageDays, txCount, flags, chain, dataUsedSafeDefaults }) {
+function getConfidence({ explorerStatus, goplusStatus, usedSafeDefaults }) {
+  if (!usedSafeDefaults && explorerStatus === 'success' && goplusStatus === 'success') return 'HIGH';
+  if (explorerStatus === 'success' || goplusStatus === 'success') return 'MEDIUM';
+  return 'LOW';
+}
+
+function computeRisk({ ageDays, txCount, flags, chain, dataUsedSafeDefaults, explorerStatus, goplusStatus }) {
   const walletAgeScore = scoreFromWalletAge(ageDays);
   const txCountScore = scoreFromTxCount(txCount);
   const sanctionsScore = flags.is_sanctioned === '1' ? 100 : 0;
@@ -232,14 +302,19 @@ function computeRisk({ ageDays, txCount, flags, chain, dataUsedSafeDefaults }) {
 
   const score = Math.round(
     walletAgeScore * 0.25 +
-      txCountScore * 0.2 +
-      sanctionsScore * 0.35 +
-      scamScore * 0.2
+    txCountScore * 0.2 +
+    sanctionsScore * 0.35 +
+    scamScore * 0.2
   );
 
   const risk = getRiskLevel(score);
   const message = getRiskMessage(risk);
   const action = getAction(score);
+  const confidence = getConfidence({
+    explorerStatus,
+    goplusStatus,
+    usedSafeDefaults: dataUsedSafeDefaults
+  });
   const reasons = buildReasons({
     ageDays,
     txCount,
@@ -252,6 +327,7 @@ function computeRisk({ ageDays, txCount, flags, chain, dataUsedSafeDefaults }) {
     score,
     risk,
     action,
+    confidence,
     message,
     reasons,
     signals: {
@@ -337,6 +413,8 @@ app.get('/health', (req, res) => {
     etherscan_configured: Boolean(
       ETHERSCAN_API_KEY && !ETHERSCAN_API_KEY.includes('<paste your key here>')
     ),
+    goplus_configured: true,
+    goplus_note: 'Current GoPlus integration uses the public address_security endpoint without a separate API key in this app.',
     checked_at: new Date().toISOString()
   });
 });
@@ -594,6 +672,10 @@ app.get('/', (req, res) => {
             <div class="signal"><label>Sanctions Check</label><div id="sigSanctions">--</div></div>
             <div class="signal"><label>Scam Flags</label><div id="sigScam">--</div></div>
             <div class="signal"><label>Safe Defaults Used</label><div id="sigDefaults">--</div></div>
+            <div class="signal"><label>Confidence</label><div id="sigConfidence">--</div></div>
+            <div class="signal"><label>Etherscan Status</label><div id="sigEtherscan">--</div></div>
+            <div class="signal"><label>GoPlus Status</label><div id="sigGoPlus">--</div></div>
+            <div class="signal"><label>GoPlus Active Flags</label><div id="sigGoPlusFlags">--</div></div>
           </div>
         </div>
       </div>
@@ -621,6 +703,10 @@ app.get('/', (req, res) => {
     const sigSanctions = document.getElementById('sigSanctions');
     const sigScam = document.getElementById('sigScam');
     const sigDefaults = document.getElementById('sigDefaults');
+    const sigConfidence = document.getElementById('sigConfidence');
+    const sigEtherscan = document.getElementById('sigEtherscan');
+    const sigGoPlus = document.getElementById('sigGoPlus');
+    const sigGoPlusFlags = document.getElementById('sigGoPlusFlags');
     const reasonsEl = document.getElementById('reasons');
 
     function getColor(score) {
@@ -691,6 +777,12 @@ app.get('/', (req, res) => {
         sigSanctions.textContent = data.signals.sanctioned ? 'Sanctioned 🚨' : 'Clear ✅';
         sigScam.textContent = data.signals.scam_flags ? 'Flags found 🚨' : 'No scam flags ✅';
         sigDefaults.textContent = data.signals.used_safe_defaults ? 'Yes ⚠️' : 'No ✅';
+        sigConfidence.textContent = data.confidence + (data.confidence === 'HIGH' ? ' ✅' : data.confidence === 'MEDIUM' ? ' ⚠️' : ' 🚨');
+        sigEtherscan.textContent = data.providers?.etherscan?.status || '--';
+        sigGoPlus.textContent = data.providers?.goplus?.status || '--';
+        sigGoPlusFlags.textContent = (data.providers?.goplus?.active_flags || []).length
+          ? data.providers.goplus.active_flags.join(', ')
+          : 'none';
         renderReasonList(data.reasons || []);
         resultEl.style.display = 'block';
       } catch (error) {
@@ -732,7 +824,9 @@ app.post('/score', withX402Gate, async (req, res) => {
     txCount: explorerData.txCount,
     flags: goPlusData.flags,
     chain,
-    dataUsedSafeDefaults
+    dataUsedSafeDefaults,
+    explorerStatus: explorerData.status,
+    goplusStatus: goPlusData.status
   });
 
   const payload = {
@@ -741,9 +835,22 @@ app.post('/score', withX402Gate, async (req, res) => {
     score: computed.score,
     risk: computed.risk,
     action: computed.action,
+    confidence: computed.confidence,
     message: computed.message,
     reasons: computed.reasons,
     signals: computed.signals,
+    providers: {
+      etherscan: {
+        status: explorerData.status,
+        error: explorerData.error || null
+      },
+      goplus: {
+        status: goPlusData.status,
+        active_flags: goPlusData.activeFlags,
+        response_shape: goPlusData.responseShape,
+        error: goPlusData.error || null
+      }
+    },
     checked_at: new Date().toISOString()
   };
 

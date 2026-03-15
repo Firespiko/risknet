@@ -12,6 +12,8 @@ It scores EVM wallet addresses before funds are sent, returning a structured ris
 - Returns human-readable **reasons** for the score
 - Supports **Ethereum** and a Goat-mode EVM flow
 - Includes a simple **frontend** and a machine-friendly **API**
+- Exposes provider/debug status for **Etherscan** and **GoPlus**
+- Returns a **confidence** rating so fallback mode is visible
 - Optionally gates requests behind **GoatX402** pay-per-request payment flow
 
 ## Why this exists
@@ -51,6 +53,7 @@ Response shape:
   "score": 45,
   "risk": "MEDIUM",
   "action": "REVIEW",
+  "confidence": "HIGH",
   "message": "Some risk detected. Proceed with caution.",
   "reasons": [
     "Wallet is 230 days old, which lowers risk.",
@@ -63,6 +66,21 @@ Response shape:
     "scam_flags": false,
     "chain_supported": true,
     "used_safe_defaults": false
+  },
+  "providers": {
+    "etherscan": {
+      "status": "success",
+      "error": null
+    },
+    "goplus": {
+      "status": "success",
+      "active_flags": [],
+      "response_shape": {
+        "topLevelKeys": ["result"],
+        "payloadKeys": ["is_sanctioned"]
+      },
+      "error": null
+    }
   },
   "checked_at": "2026-03-15T00:00:00.000Z"
 }
