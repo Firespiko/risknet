@@ -1,5 +1,7 @@
 # RiskNet 🐐
 
+Live app: <https://risknet-six.vercel.app>
+
 RiskNet is now a **GOAT-native paid agent**:
 - **ERC-8004** on-chain agent identity
 - **x402** pay-per-request payment flow
