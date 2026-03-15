@@ -1,5 +1,6 @@
 import { GoatX402Client } from 'goatx402-sdk-server'
 import { config } from './config.js'
+import { recordOrder, recordPayment } from './activity-store.js'
 
 export const client = new GoatX402Client({
   baseUrl: config.apiUrl,
@@ -29,6 +30,17 @@ export function requirePayment(amountWei) {
           tokenContract: config.tokenContract,
           fromAddress,
           amountWei
+        })
+
+        recordOrder({
+          orderId: order.orderId,
+          flow: order.flow,
+          payToAddress: order.payToAddress,
+          fromAddress,
+          amountWei,
+          tokenSymbol: config.tokenSymbol,
+          chainId: config.chainId,
+          status: 'PAYMENT_REQUIRED'
         })
 
         return res.status(402).json({
@@ -62,13 +74,23 @@ export function requirePayment(amountWei) {
           paidAt: status.confirmedAt,
           fromAddress: status.fromAddress,
           amountWei: status.amountWei,
-          txHash: status.txHash
+          txHash: status.txHash,
+          status: status.status
         }
         paidOrders.set(orderId, paymentInfo)
         req.payment = paymentInfo
+        recordPayment(paymentInfo)
         console.log(`[x402] ✅ Payment verified: ${orderId}`)
         return next()
       }
+
+      recordPayment({
+        orderId,
+        status: status.status,
+        fromAddress: status.fromAddress,
+        amountWei: status.amountWei,
+        txHash: status.txHash || null
+      })
 
       return res.status(402).json({
         error: 'Payment not confirmed',

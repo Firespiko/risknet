@@ -31,6 +31,8 @@ export const config = {
 
   etherscanApiKey: process.env.ETHERSCAN_API_KEY || '',
   goplusApiBase: process.env.GOPLUS_API_BASE || 'https://api.gopluslabs.io/api/v1',
+  goplusAppKey: process.env.GOPLUS_APP_KEY || '',
+  goplusAppSecret: process.env.GOPLUS_APP_SECRET || '',
 
   agentName: process.env.AGENT_NAME || 'GOAT RiskNet Agent',
   agentDescription:

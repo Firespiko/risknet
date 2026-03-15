@@ -112,8 +112,13 @@ async function fetchEtherscanSignals(wallet) {
 
 async function fetchGoPlusSignals(wallet) {
   try {
+    const headers = {}
+    if (config.goplusAppKey) headers['X-API-KEY'] = config.goplusAppKey
+    if (config.goplusAppSecret) headers['X-API-SECRET'] = config.goplusAppSecret
+
     const response = await axios.get(`${config.goplusApiBase}/address_security/${wallet}`, {
       params: { chain_id: 1 },
+      headers,
       timeout: 15000
     })
 

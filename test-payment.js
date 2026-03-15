@@ -70,7 +70,7 @@ async function run() {
   console.log()
 
   console.log('1⃣ Fetching agent card...')
-  const card = await fetch(`${BASE}/`).then((r) => r.json())
+  const card = await fetch(`${BASE}/?format=json`).then((r) => r.json())
   console.log(` Agent: ${card.agent}`)
   console.log(` Services: ${card.services.map((s) => s.endpoint).join(', ')}`)
   console.log()
