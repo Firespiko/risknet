@@ -1,16 +1,11 @@
 {
   "name": "risknet",
-  "version": "1.0.0",
-  "description": "Wallet fraud firewall for AI agents",
+  "version": "1.1.0",
+  "description": "Goat-native wallet risk firewall for AI agents",
   "type": "module",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
-  },
-  "dependencies": {
-    "axios": "^1.13.6",
-    "dotenv": "^17.3.1",
-    "express": "^5.2.1",
-    "goatx402-sdk-server": "^0.1.0"
+    "start": "node server.js",
+    "dev": "node server.js"
   }
 }
